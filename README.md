@@ -1,36 +1,129 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CrowdSense — AI-Powered Crowd Safety System
 
-## Getting Started
+Real-time crowd density monitoring and safety alert system using YOLOv8 computer vision, WebSocket streaming, and a Next.js dashboard.
 
-First, run the development server:
+![CrowdSense Dashboard](screenshot-placeholder.png)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+## 🏗️ Architecture
+
+```
+┌────────────────────┐     WebSocket (ws://localhost:8000/ws)     ┌────────────────────┐
+│   Python Backend   │ ◄──────────────────────────────────────►  │   Next.js Frontend │
+│   FastAPI + YOLO   │          JSON + base64 frames              │   React Dashboard  │
+│   Port 8000        │                                            │   Port 3000        │
+└────────────────────┘                                            └────────────────────┘
+        │
+        ▼
+   Webcam (cv2)
+   or Mock Mode
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 📁 Project Structure
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+ps5/
+├── backend/
+│   ├── main.py              # FastAPI server — WebSocket + REST endpoints
+│   ├── detector.py          # YOLOv8 person detection + optical flow
+│   ├── zone_manager.py      # Zone density calculation + heatmap
+│   ├── alert_manager.py     # Smart alert system (3 rules)
+│   └── requirements.txt     # Python dependencies
+├── src/
+│   ├── app/
+│   │   ├── globals.css      # Dark theme + animations
+│   │   ├── layout.tsx       # Root layout with Inter font
+│   │   ├── page.tsx         # Landing page with radar hero
+│   │   └── dashboard/
+│   │       └── page.tsx     # Live monitoring dashboard
+│   ├── components/
+│   │   └── ui/
+│   │       └── radar-effect.tsx  # Animated radar component
+│   └── hooks/
+│       └── useCrowdSocket.ts    # WebSocket hook for real-time data
+├── start.sh                 # Linux/Mac startup script
+├── start.bat                # Windows startup script
+└── README.md
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🚀 Setup & Running
 
-## Learn More
+### Prerequisites
 
-To learn more about Next.js, take a look at the following resources:
+- **Node.js** 18+ and npm
+- **Python** 3.9+
+- Webcam (optional — falls back to mock data)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Install Dependencies
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+# Frontend
+npm install
 
-## Deploy on Vercel
+# Backend
+cd backend
+pip install -r requirements.txt
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Run the Project
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**Option 1 — Windows:**
+```bash
+start.bat
+```
+
+**Option 2 — Linux/Mac:**
+```bash
+chmod +x start.sh
+./start.sh
+```
+
+**Option 3 — Manual:**
+```bash
+# Terminal 1: Backend
+cd backend
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+# Terminal 2: Frontend
+npm run dev
+```
+
+Then open **http://localhost:3000**
+
+## 📊 Dashboard Cards
+
+| Card | Data Source | Update Rate |
+|------|-----------|-------------|
+| **Live Feed** | Webcam + YOLOv8 bounding boxes (base64 JPEG) | ~10 FPS |
+| **Density Heatmap** | 6×4 grid computed from detection positions | ~10 FPS |
+| **Zone Status** | 4 quadrants with Safe/Warning/Critical thresholds | ~10 FPS |
+| **Alert Feed** | Rule-based alerts (escalation, rapid buildup, sustained critical) | Event-driven |
+| **Crowd Count Graph** | Rolling 60-point history via Recharts | ~10 FPS |
+| **Optical Flow** | Farneback optical flow sampled on 5×4 grid | ~10 FPS |
+
+## 🔔 Alert Rules
+
+1. **Zone Escalation** — Fires when any zone crosses from Warning → Critical
+2. **Rapid Buildup** — Fires when total count increases by >5 in under 3 seconds
+3. **Sustained Critical** — Fires when a zone stays Critical for >10 seconds
+
+## 🎯 Key Features
+
+- **YOLOv8 Detection** — Auto-downloads `yolov8n.pt` on first run
+- **Mock Mode Fallback** — If no webcam is available, generates realistic mock data
+- **WebSocket Auto-Reconnect** — Frontend reconnects every 3 seconds if connection drops
+- **Connection Status** — Navbar shows green/red pulsing dot based on WebSocket state
+- **Framer Motion Animations** — All cards animate in; alerts slide in from top
+
+## ⚙️ Configuration
+
+| Setting | Value | Location |
+|---------|-------|----------|
+| Backend port | 8000 | `backend/main.py` |
+| Frontend port | 3000 | `package.json` (Next.js default) |
+| WebSocket URL | `ws://localhost:8000/ws` | `src/hooks/useCrowdSocket.ts` |
+| Frame rate | ~10 FPS (100ms interval) | `backend/main.py` |
+| Alert buffer | Last 20 alerts | `backend/alert_manager.py` |
+| History length | 60 data points | `backend/main.py` |
+| Zone thresholds | 0–5 Safe, 6–15 Warning, 16+ Critical | `backend/zone_manager.py` |

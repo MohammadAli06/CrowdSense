@@ -5,3 +5,7 @@ opencv-python
 websockets
 numpy
 python-multipart
+pyjwt
+bcrypt
+motor
+python-dotenv

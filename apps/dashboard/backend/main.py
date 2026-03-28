@@ -30,10 +30,29 @@ from detector import (
 )
 from zone_manager import calculate_zones
 from alert_manager import AlertManager
+from auth import auth_router
+from database import connect as db_connect, disconnect as db_disconnect
 
 # ── App setup ───────────────────────────────────────────────────────
 
 app = FastAPI(title="CrowdSense Backend")
+
+# ── Lifecycle ────────────────────────────────────────────────────────
+
+@app.on_event("startup")
+async def startup():
+    try:
+        await db_connect()
+    except Exception as e:
+        print(f"[DB] Warning: could not connect to MongoDB ({e}). Auth will not work.")
+
+@app.on_event("shutdown")
+async def shutdown():
+    await db_disconnect()
+
+# ── Routers ──────────────────────────────────────────────────────────
+
+app.include_router(auth_router)
 
 app.add_middleware(
     CORSMiddleware,

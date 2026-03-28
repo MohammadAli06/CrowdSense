@@ -2,404 +2,268 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import Link from "next/link";
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
-import {
-  HiOutlineCog,
-  HiOutlineStatusOnline,
-} from "react-icons/hi";
-import { BsExclamationTriangleFill } from "react-icons/bs";
-
+import { DashboardShell } from "@/components/sidebar";
 import { useCrowdSocket } from "@/hooks/useCrowdSocket";
 import type { ZoneInfo, AlertItem } from "@/hooks/useCrowdSocket";
 
-/* ------------------------------------------------------------------ */
-/*  HELPERS                                                            */
-/* ------------------------------------------------------------------ */
-
 const ZONE_ORDER = ["A", "B", "C", "D"] as const;
 
-function heatmapColor(value: string) {
-  switch (value) {
-    case "critical": return "bg-red-600";
-    case "high":     return "bg-orange-500";
-    case "med":      return "bg-yellow-400";
-    default:         return "bg-green-500";
-  }
+function zoneStatusBadge(status: string) {
+  if (status === "Critical") return "cs-badge cs-badge-crit";
+  if (status === "Warning")  return "cs-badge cs-badge-warn";
+  return "cs-badge cs-badge-safe";
 }
 
-function heatmapOpacity(value: string) {
-  switch (value) {
-    case "critical": return 1;
-    case "high":     return 0.85;
-    case "med":      return 0.7;
-    default:         return 0.55;
-  }
+function severityClass(s: string) {
+  if (s === "High") return "cs-badge cs-badge-high";
+  if (s === "Med")  return "cs-badge cs-badge-med";
+  return "cs-badge cs-badge-low";
 }
 
-function severityBadge(severity: string) {
-  const colors: Record<string, string> = {
-    High: "red",
-    Med: "yellow",
-    Low: "green",
-  };
-  return colors[severity] ?? "green";
+function heatColor(v: string) {
+  if (v === "critical") return "#ef4444";
+  if (v === "high")     return "#f97316";
+  if (v === "med")      return "#fbbf24";
+  return "#10b981";
 }
 
-function statusBadgeColor(color: string) {
-  const colors: Record<string, string> = {
-    red: "bg-red-500/15 text-red-400 border-red-500/30",
-    yellow: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
-    green: "bg-green-500/15 text-green-400 border-green-500/30",
-  };
-  return colors[color] ?? colors.green;
-}
-
-function dotColor(color: string) {
-  const colors: Record<string, string> = {
-    red: "bg-red-400",
-    yellow: "bg-yellow-400",
-    green: "bg-green-400",
-  };
-  return colors[color] ?? "bg-green-400";
-}
-
-/* ------------------------------------------------------------------ */
-/*  CARD WRAPPER                                                       */
-/* ------------------------------------------------------------------ */
-function Card({
-  children,
-  className = "",
-  delay = 0,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  delay?: number;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay }}
-      className={`rounded-2xl border border-slate-800 bg-slate-900 p-5 ${className}`}
-    >
-      {children}
-    </motion.div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  STATUS BADGE                                                       */
-/* ------------------------------------------------------------------ */
-function StatusBadge({ status, color }: { status: string; color: string }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeColor(color)}`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${dotColor(color)}`} />
-      {status}
-    </span>
-  );
-}
-
-/* ================================================================== */
-/*  DASHBOARD PAGE                                                     */
-/* ================================================================== */
 export default function DashboardPage() {
-  const [currentTime, setCurrentTime] = useState("");
+  const [time, setTime] = useState("");
+  const { frame, totalCount, zones, heatmap, alerts, crowdHistory, flowVectors, flowMagnitudes, isConnected, mockMode } = useCrowdSocket();
 
-  const {
-    frame,
-    totalCount,
-    zones,
-    heatmap,
-    alerts,
-    crowdHistory,
-    flowVectors,
-    flowMagnitudes,
-    isConnected,
-    mockMode,
-  } = useCrowdSocket();
-
-  // ── Clock ────────────────────────────────────────────────────────
   useEffect(() => {
-    const tick = () =>
-      setCurrentTime(
-        new Date().toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: true,
-        })
-      );
+    const tick = () => setTime(new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }));
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
 
-  // ── Chart data from live history ─────────────────────────────────
-  const chartData = useMemo(
-    () => crowdHistory.map((count, i) => ({ time: `${i}s`, count })),
-    [crowdHistory],
-  );
-
-  // ── Zone array for rendering ─────────────────────────────────────
-  const zoneCards = ZONE_ORDER.map((z) => {
+  const chartData = useMemo(() => crowdHistory.map((c, i) => ({ t: `${i}s`, c })), [crowdHistory]);
+  const zoneCards = ZONE_ORDER.map(z => {
     const info: ZoneInfo = zones[z] ?? { count: 0, status: "Safe", color: "green" };
     return { name: `Zone ${z}`, ...info };
   });
 
+  const highCount = alerts.filter(a => a.severity === "High").length;
+
   return (
-    <div className="min-h-screen bg-slate-950">
-      {/* ------- NAVBAR ------- */}
-      <nav className="sticky top-0 z-50 flex items-center justify-between border-b border-slate-800 bg-slate-950/80 px-6 py-3 backdrop-blur-md">
-        {/* Left — logo */}
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/20">
-            <HiOutlineStatusOnline className="h-5 w-5 text-sky-400" />
-          </div>
-          <span className="text-lg font-bold text-white">CrowdSense</span>
-        </Link>
+    <DashboardShell
+      title="Dashboard"
+      searchPlaceholder="Global system search..."
+      topRight={
+        <div className="flex items-center gap-2 text-[11px] font-mono" style={{ color: isConnected ? "#10b981" : "#ff4d6d" }}>
+          <span className="w-2 h-2 rounded-full animate-pulse-dot" style={{ background: isConnected ? "#10b981" : "#ff4d6d" }} />
+          {isConnected ? (mockMode ? "Mock Mode" : "Camera Feed Active") : "Reconnecting…"}
+        </div>
+      }
+      statusItems={[
+        { label: `GET /ws/crowd • ${isConnected ? "200 OK" : "503"}`, color: isConnected ? "#10b981" : "#ff4d6d" },
+        { label: time, color: "#5a7a8a" },
+      ]}
+    >
+      <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 20, flex: 1 }}>
 
-        {/* Center — live status */}
-        <div className="hidden items-center gap-2 text-sm font-medium text-slate-300 sm:flex">
-          {isConnected ? (
-            <>
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-pulse-dot absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
-              </span>
-              {mockMode ? "Live — Mock Mode (No Camera)" : "Live — Camera Feed Active"}
-            </>
-          ) : (
-            <>
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-pulse-dot absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
-              </span>
-              <span className="text-red-400">Reconnecting…</span>
-            </>
-          )}
+        {/* ── Stat row ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+          <StatCard
+            label="Total Detected"
+            value={totalCount.toLocaleString()}
+            sub={<span style={{ color: "#10b981" }}>↑ Live count</span>}
+            icon="👥"
+          />
+          <StatCard
+            label="High Severity Alerts"
+            value={String(highCount)}
+            sub={highCount > 0 ? <span style={{ color: "#ff4d6d" }}>⚠ Requires immediate action</span> : <span style={{ color: "#10b981" }}>All clear</span>}
+            icon="⚠"
+            accent="#ff4d6d"
+          />
+          <StatCard
+            label="Active Zones"
+            value={String(ZONE_ORDER.length)}
+            sub={<span style={{ color: "#5a7a8a" }}>● All monitoring</span>}
+            icon="📍"
+          />
         </div>
 
-        {/* Right — time + settings */}
-        <div className="flex items-center gap-4">
-          <span className="font-mono text-sm text-slate-400">{currentTime}</span>
-          <button className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white">
-            <HiOutlineCog className="h-5 w-5" />
-          </button>
-        </div>
-      </nav>
-
-      {/* ------- GRID ------- */}
-      <main className="mx-auto grid max-w-[1440px] gap-5 p-5 lg:grid-cols-3 xl:grid-cols-4">
-        {/* 1 ▸ Live Feed (col-span-2) */}
-        <Card className="lg:col-span-2" delay={0.05}>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-300">Live Feed</h2>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-0.5 text-xs font-semibold text-sky-400">
-              {totalCount} persons detected
-            </span>
-          </div>
-          <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-slate-800">
-            {frame ? (
-              <img
-                src={`data:image/jpeg;base64,${frame}`}
-                alt="Live camera feed with YOLOv8 person detection"
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
-                  <span className="text-sm font-medium text-slate-500">
-                    Connecting to backend…
-                  </span>
+        {/* ── Main grid ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
+          {/* Live feed */}
+          <motion.div className="cs-card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <h2 style={{ fontSize: 13, fontWeight: 600, color: "#c8d8e8" }}>Live Feed</h2>
+              <span className="cs-badge" style={{ background: "rgba(0,200,212,0.12)", color: "#00c8d4", border: "1px solid rgba(0,200,212,0.3)" }}>
+                {totalCount} detected
+              </span>
+            </div>
+            <div style={{ position: "relative", aspectRatio: "16/9", background: "#08111d", borderRadius: 8, overflow: "hidden" }}>
+              {frame ? (
+                <img src={`data:image/jpeg;base64,${frame}`} alt="Live camera" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: "50%", border: "2px solid #00c8d4", borderTopColor: "transparent", animation: "spin 1s linear infinite" }} />
+                  <span style={{ fontSize: 12, color: "#5a7a8a" }}>Connecting to backend…</span>
                 </div>
-              </div>
-            )}
-          </div>
-        </Card>
+              )}
+            </div>
+          </motion.div>
 
-        {/* 2 ▸ Density Heatmap */}
-        <Card delay={0.1}>
-          <h2 className="mb-1 text-sm font-semibold text-slate-300">
-            Zone Density Map
-          </h2>
-          <p className="mb-3 text-xs text-slate-500">Real-time zone density overview</p>
-          <div className="grid grid-cols-6 gap-1.5">
-            {(heatmap.length > 0 ? heatmap : Array(4).fill(Array(6).fill("low")))
-              .flat()
-              .map((v: string, i: number) => (
-                <div
-                  key={i}
-                  className={`aspect-square rounded-md ${heatmapColor(v)} transition-colors duration-500`}
-                  style={{ opacity: heatmapOpacity(v) }}
-                  title={`Density: ${v}`}
-                />
-              ))}
-          </div>
-          {/* Legend */}
-          <div className="mt-3 flex items-center gap-3 text-[10px] text-slate-500">
-            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-green-500" />Low</span>
-            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-yellow-400" />Med</span>
-            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-orange-500" />High</span>
-            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-red-600" />Critical</span>
-          </div>
-        </Card>
-
-        {/* 3 ▸ Zone Status */}
-        <Card delay={0.15}>
-          <h2 className="mb-3 text-sm font-semibold text-slate-300">
-            Zone Status
-          </h2>
-          <div className="grid grid-cols-2 gap-3">
-            {zoneCards.map((z) => (
-              <div
-                key={z.name}
-                className="flex flex-col gap-1.5 rounded-xl border border-slate-800 bg-slate-800/50 p-3"
-              >
-                <span className="text-xs font-semibold text-slate-400">
-                  {z.name}
-                </span>
-                <span className="text-2xl font-bold text-white">{z.count}</span>
-                <StatusBadge status={z.status} color={z.color} />
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        {/* 4 ▸ Alert Feed */}
-        <Card delay={0.2}>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-300">Alert Feed</h2>
-            <BsExclamationTriangleFill className="h-4 w-4 text-yellow-400" />
-          </div>
-          <div className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
-            <AnimatePresence initial={false}>
-              {(alerts.length > 0
-                ? alerts
-                : [{ id: 0, timestamp: "--:--:--", message: "Waiting for data…", severity: "Low" as const, zone: "-" }]
-              ).map((a: AlertItem) => (
-                <motion.div
-                  key={a.id}
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.25 }}
-                  className="flex items-start gap-2 rounded-lg border border-slate-800 bg-slate-800/40 p-2.5"
-                >
-                  <span className="mt-0.5 text-xs">
-                    {a.severity === "High" ? "🔴" : a.severity === "Med" ? "🟡" : "🟢"}
-                  </span>
-                  <div className="flex-1">
-                    <p className="text-xs leading-snug text-slate-300">
-                      {a.message}
-                    </p>
-                    <span className="mt-1 inline-block text-[10px] text-slate-500">
-                      {a.timestamp}
-                    </span>
+          {/* Right column */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* Zone Status */}
+            <motion.div className="cs-card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+              <h2 style={{ fontSize: 13, fontWeight: 600, color: "#c8d8e8", marginBottom: 10 }}>Zone Status</h2>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {zoneCards.map(z => (
+                  <div key={z.name} style={{ background: "#08111d", border: "1px solid rgba(30,60,80,0.6)", borderRadius: 8, padding: "10px 12px" }}>
+                    <div style={{ fontSize: 11, color: "#5a7a8a", fontWeight: 600, marginBottom: 4 }}>{z.name}</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 4 }}>{z.count}</div>
+                    <span className={zoneStatusBadge(z.status)}>{z.status}</span>
                   </div>
-                  <StatusBadge
-                    status={a.severity}
-                    color={severityBadge(a.severity)}
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Heatmap */}
+            <motion.div className="cs-card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+              <h2 style={{ fontSize: 13, fontWeight: 600, color: "#c8d8e8", marginBottom: 6 }}>Density Heatmap</h2>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 4 }}>
+                {(heatmap.length > 0 ? heatmap : Array(4).fill(Array(6).fill("low")))
+                  .flat()
+                  .map((v: string, i: number) => (
+                    <div
+                      key={i}
+                      title={`Density: ${v}`}
+                      style={{
+                        aspectRatio: "1",
+                        borderRadius: 4,
+                        background: heatColor(v),
+                        opacity: v === "critical" ? 0.95 : v === "high" ? 0.75 : v === "med" ? 0.6 : 0.4,
+                        transition: "background 0.5s, opacity 0.5s",
+                      }}
+                    />
+                  ))}
+              </div>
+              <div style={{ display: "flex", gap: 10, marginTop: 8, fontSize: 10, color: "#5a7a8a" }}>
+                {[["#10b981", "Low"], ["#fbbf24", "Med"], ["#f97316", "High"], ["#ef4444", "Critical"]].map(([c, l]) => (
+                  <span key={l} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 2, background: c, display: "inline-block" }} />{l}
+                  </span>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </div>
+
+        {/* ── Bottom row ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 16 }}>
+          {/* Chart */}
+          <motion.div className="cs-card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+            <h2 style={{ fontSize: 13, fontWeight: 600, color: "#c8d8e8", marginBottom: 4 }}>Live Crowd Count — Last 60s</h2>
+            <p style={{ fontSize: 11, color: "#5a7a8a", marginBottom: 12 }}>Tracking total detected persons</p>
+            <div style={{ height: 160 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1a2e3e" />
+                  <XAxis dataKey="t" tick={{ fontSize: 9, fill: "#5a7a8a" }} axisLine={{ stroke: "#1a2e3e" }} tickLine={false} interval={9} />
+                  <YAxis tick={{ fontSize: 9, fill: "#5a7a8a" }} axisLine={{ stroke: "#1a2e3e" }} tickLine={false} width={28} />
+                  <Tooltip
+                    contentStyle={{ background: "#0d1420", border: "1px solid #1e3a4a", borderRadius: 8, fontSize: 11 }}
+                    labelStyle={{ color: "#5a7a8a" }}
+                    itemStyle={{ color: "#00c8d4" }}
                   />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        </Card>
+                  <Line type="monotone" dataKey="c" stroke="#00c8d4" strokeWidth={2} dot={false} activeDot={{ r: 3, fill: "#00c8d4" }} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
 
-        {/* 5 ▸ Crowd Count Graph (col-span-2) */}
-        <Card className="lg:col-span-2" delay={0.25}>
-          <h2 className="mb-1 text-sm font-semibold text-slate-300">
-            Live Crowd Count — Last 60s
-          </h2>
-          <p className="mb-4 text-xs text-slate-500">Tracking total detected persons</p>
-          <div className="h-56 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis
-                  dataKey="time"
-                  tick={{ fontSize: 10, fill: "#94a3b8" }}
-                  axisLine={{ stroke: "#334155" }}
-                  tickLine={false}
-                  interval={9}
-                />
-                <YAxis
-                  tick={{ fontSize: 10, fill: "#94a3b8" }}
-                  axisLine={{ stroke: "#334155" }}
-                  tickLine={false}
-                  width={30}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#0f172a",
-                    border: "1px solid #334155",
-                    borderRadius: "0.75rem",
-                    fontSize: 12,
-                  }}
-                  labelStyle={{ color: "#94a3b8" }}
-                  itemStyle={{ color: "#38bdf8" }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="count"
-                  stroke="#0ea5e9"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4, fill: "#0ea5e9" }}
-                  isAnimationActive={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
+          {/* Alert feed */}
+          <motion.div className="cs-card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <h2 style={{ fontSize: 13, fontWeight: 600, color: "#c8d8e8" }}>Alert Feed</h2>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#fbbf24">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13" stroke="#0d1420" strokeWidth="2"/>
+                <line x1="12" y1="17" x2="12.01" y2="17" stroke="#0d1420" strokeWidth="2"/>
+              </svg>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 200, overflowY: "auto" }}>
+              <AnimatePresence initial={false}>
+                {(alerts.length > 0 ? alerts : [{ id: 0, timestamp: "--:--:--", message: "Waiting for data…", severity: "Low" as const, zone: "-" }])
+                  .slice(0, 6)
+                  .map((a: AlertItem) => (
+                    <motion.div
+                      key={a.id}
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      style={{ background: "#08111d", border: "1px solid rgba(30,60,80,0.5)", borderRadius: 7, padding: "8px 10px" }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                        <span style={{ fontSize: 10, color: "#5a7a8a", fontFamily: "monospace" }}>{a.timestamp}</span>
+                        <span className={severityClass(a.severity)}>{a.severity}</span>
+                      </div>
+                      <p style={{ fontSize: 11, color: "#c8d8e8", lineHeight: 1.4 }}>{a.message}</p>
+                    </motion.div>
+                  ))}
+              </AnimatePresence>
+            </div>
+          </motion.div>
 
-        {/* 6 ▸ Optical Flow */}
-        <Card className="lg:col-span-2" delay={0.3}>
-          <h2 className="mb-1 text-sm font-semibold text-slate-300">
-            Optical Flow — Movement Vectors
-          </h2>
-          <p className="mb-4 text-xs text-slate-500">
-            Predicted crowd direction
-          </p>
-          <div className="grid grid-cols-5 gap-2">
-            {(flowVectors.length > 0
-              ? flowVectors
-              : Array(4).fill(Array(5).fill("·"))
-            )
-              .flat()
-              .map((arrow: string, i: number) => {
-                const mag = flowMagnitudes.length > 0
-                  ? flowMagnitudes[Math.floor(i / 5)]?.[i % 5] ?? 0
-                  : 0;
-                const isStrong = mag > 0.5;
+          {/* Optical flow */}
+          <motion.div className="cs-card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+            <h2 style={{ fontSize: 13, fontWeight: 600, color: "#c8d8e8", marginBottom: 4 }}>Motion Vectors</h2>
+            <p style={{ fontSize: 11, color: "#5a7a8a", marginBottom: 10 }}>Optical flow</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4 }}>
+              {(flowVectors.length > 0 ? flowVectors : Array(4).fill(Array(5).fill("·"))).flat().map((arrow: string, i: number) => {
+                const mag = flowMagnitudes.length > 0 ? (flowMagnitudes[Math.floor(i / 5)]?.[i % 5] ?? 0) : 0;
+                const strong = mag > 0.5;
                 return (
                   <div
                     key={i}
-                    className={`flex aspect-square items-center justify-center rounded-lg border transition-colors duration-300 text-lg font-medium
-                      ${isStrong
-                        ? "border-sky-500/40 bg-sky-500/10 text-sky-400"
-                        : "border-slate-800 bg-slate-800/50 text-slate-500"
-                      }`}
+                    style={{
+                      aspectRatio: "1",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderRadius: 6,
+                      border: `1px solid ${strong ? "rgba(0,200,212,0.4)" : "rgba(30,60,80,0.5)"}`,
+                      background: strong ? "rgba(0,200,212,0.08)" : "#08111d",
+                      fontSize: 14,
+                      color: strong ? "#00c8d4" : "#3a5a6a",
+                      transition: "all 0.3s",
+                    }}
                   >
                     {arrow}
                   </div>
                 );
               })}
-          </div>
-        </Card>
-      </main>
-    </div>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+
+      {/* CSS for spinner — injected inline */}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </DashboardShell>
+  );
+}
+
+function StatCard({ label, value, sub, icon, accent = "#00c8d4" }: {
+  label: string; value: string; sub: React.ReactNode; icon: string; accent?: string;
+}) {
+  return (
+    <motion.div className="cs-stat-card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+      <div>
+        <div style={{ fontSize: 11, color: "#5a7a8a", fontWeight: 600, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
+        <div style={{ fontSize: 32, fontWeight: 800, color: accent === "#ff4d6d" && value !== "0" ? accent : "#fff", lineHeight: 1 }}>{value}</div>
+        <div style={{ fontSize: 11, marginTop: 6 }}>{sub}</div>
+      </div>
+      <div style={{ fontSize: 28, opacity: 0.25 }}>{icon}</div>
+    </motion.div>
   );
 }

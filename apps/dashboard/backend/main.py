@@ -7,7 +7,6 @@ GET  /          Health check.
 WS   /ws        Real-time crowd data stream (WebSocket).
 GET  /snapshot   Single processed frame as JPEG.
 """
-
 from __future__ import annotations
 
 import asyncio

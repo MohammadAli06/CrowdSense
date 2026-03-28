@@ -59,12 +59,18 @@ export function Navbar() {
 
         {/* Right Side Buttons */}
         <div className="flex items-center gap-3">
-          <button className="hidden sm:inline-flex px-5 py-2 rounded-lg border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 transition-colors duration-200 text-sm font-medium">
+          <Link
+            href="/auth"
+            className="hidden sm:inline-flex px-5 py-2 rounded-lg border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 transition-colors duration-200 text-sm font-medium"
+          >
             Sign in
-          </button>
-          <button className="inline-flex px-5 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white transition-colors duration-200 text-sm font-medium shadow-lg shadow-sky-600/25">
+          </Link>
+          <Link
+            href="/auth"
+            className="inline-flex px-5 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white transition-colors duration-200 text-sm font-medium shadow-lg shadow-sky-600/25"
+          >
             Get access
-          </button>
+          </Link>
         </div>
       </div>
     </motion.header>

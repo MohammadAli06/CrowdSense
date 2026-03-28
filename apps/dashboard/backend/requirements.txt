@@ -5,7 +5,16 @@ opencv-python
 websockets
 numpy
 python-multipart
+<<<<<<< HEAD
+=======
+facenet-pytorch
+torchvision
+>>>>>>> kartikey2
 pyjwt
 bcrypt
 motor
 python-dotenv
+<<<<<<< HEAD
+=======
+certifi
+>>>>>>> kartikey2

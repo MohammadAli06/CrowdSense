@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -34,6 +34,27 @@ export default function DashboardPage() {
   const [time, setTime] = useState("");
   const { frame, totalCount, zones, heatmap, alerts, crowdHistory, flowVectors, flowMagnitudes, isConnected, mockMode } = useCrowdSocket();
 
+<<<<<<< HEAD
+=======
+  const {
+    frame,
+    totalCount,
+    personCount,
+    headCount,
+    detectionMode,
+    zones,
+    heatmap,
+    alerts,
+    crowdHistory,
+    flowVectors,
+    flowMagnitudes,
+    isConnected,
+    mockMode,
+    reconnect,
+  } = useCrowdSocket();
+
+  // ── Clock ────────────────────────────────────────────────────────
+>>>>>>> kartikey2
   useEffect(() => {
     const tick = () => setTime(new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }));
     tick();
@@ -41,12 +62,35 @@ export default function DashboardPage() {
     return () => clearInterval(id);
   }, []);
 
+<<<<<<< HEAD
   const chartData = useMemo(() => crowdHistory.map((c, i) => ({ t: `${i}s`, c })), [crowdHistory]);
   const zoneCards = ZONE_ORDER.map(z => {
+=======
+  // ── Critical flash ───────────────────────────────────────────────
+  const [criticalFlash, setCriticalFlash] = useState(false);
+
+  useEffect(() => {
+    if (alerts.some((a) => a.severity === "High")) {
+      setCriticalFlash(true);
+      const t = setTimeout(() => setCriticalFlash(false), 1000);
+      return () => clearTimeout(t);
+    }
+  }, [alerts]);
+
+  // ── Chart data from live history ─────────────────────────────────
+  const chartData = useMemo(
+    () => crowdHistory.map((count, i) => ({ time: `${i}s`, count })),
+    [crowdHistory],
+  );
+
+  // ── Zone array for rendering ─────────────────────────────────────
+  const zoneCards = ZONE_ORDER.map((z) => {
+>>>>>>> kartikey2
     const info: ZoneInfo = zones[z] ?? { count: 0, status: "Safe", color: "green" };
     return { name: `Zone ${z}`, ...info };
   });
 
+<<<<<<< HEAD
   const highCount = alerts.filter(a => a.severity === "High").length;
 
   return (
@@ -65,6 +109,43 @@ export default function DashboardPage() {
       ]}
     >
       <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 20, flex: 1 }}>
+=======
+  // ── Mode switch helpers ──────────────────────────────────────────
+  const switchMode = useCallback(async (url: string, method = "POST") => {
+    try { await fetch(url, { method }); } catch { /* ignore */ }
+    reconnect();
+  }, [reconnect]);
+
+  const uploadVideo = useCallback(async (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      await fetch("http://localhost:8000/upload-video", {
+        method: "POST",
+        body: form,
+      });
+    } catch { /* ignore */ }
+    reconnect();
+  }, [reconnect]);
+
+  return (
+    <div
+      className={`min-h-screen transition-all duration-300 ${
+        criticalFlash
+          ? "ring-2 ring-red-500 ring-inset bg-red-950/10"
+          : "bg-slate-950"
+      }`}
+    >
+      {/* ------- NAVBAR ------- */}
+      <nav className="sticky top-0 z-50 flex items-center justify-between border-b border-slate-800 bg-slate-950/80 px-6 py-3 backdrop-blur-md">
+        {/* Left — logo */}
+        <Link href="/" className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/20">
+            <HiOutlineStatusOnline className="h-5 w-5 text-sky-400" />
+          </div>
+          <span className="text-lg font-bold text-white">CrowdSense</span>
+        </Link>
+>>>>>>> kartikey2
 
         {/* ── Stat row ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
@@ -89,6 +170,7 @@ export default function DashboardPage() {
           />
         </div>
 
+<<<<<<< HEAD
         {/* ── Main grid ── */}
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
           {/* Live feed */}
@@ -106,6 +188,92 @@ export default function DashboardPage() {
                 <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
                   <div style={{ width: 32, height: 32, borderRadius: "50%", border: "2px solid #00c8d4", borderTopColor: "transparent", animation: "spin 1s linear infinite" }} />
                   <span style={{ fontSize: 12, color: "#5a7a8a" }}>Connecting to backend…</span>
+=======
+        {/* Right — time + settings */}
+        <div className="flex items-center gap-4">
+          <span className="font-mono text-sm text-slate-400">{currentTime}</span>
+          <button className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white">
+            <HiOutlineCog className="h-5 w-5" />
+          </button>
+        </div>
+      </nav>
+
+      {/* ------- INPUT SOURCE SWITCHER ------- */}
+      <main className="mx-auto max-w-[1440px] px-5 pt-5">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <span className="text-sm text-slate-400">Input Source:</span>
+
+          <button
+            onClick={() => switchMode("http://localhost:8000/set-mode?mode=webcam")}
+            className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700"
+          >
+            📷 Webcam
+          </button>
+
+          <button
+            onClick={() => switchMode("http://localhost:8000/bundled-demo", "GET")}
+            className="rounded-lg border border-sky-700 bg-sky-900/40 px-3 py-1.5 text-xs font-medium text-sky-400 transition-colors hover:bg-sky-900/70"
+          >
+            🎬 Crowd Demo
+          </button>
+
+          <label className="cursor-pointer rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700">
+            📁 Upload File
+            <input
+              type="file"
+              accept="video/*,image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) uploadVideo(file);
+                e.target.value = "";
+              }}
+            />
+          </label>
+
+          <div className="ml-auto flex items-center gap-2">
+            <div
+              className={`h-2 w-2 rounded-full ${
+                isConnected ? "animate-pulse bg-green-500" : "bg-red-500"
+              }`}
+            />
+            <span className="text-xs text-slate-400">
+              {isConnected ? "Backend connected" : "Reconnecting..."}
+            </span>
+          </div>
+        </div>
+      </main>
+
+      {/* ------- GRID ------- */}
+      <main className="mx-auto grid max-w-[1440px] gap-5 px-5 pb-5 lg:grid-cols-3 xl:grid-cols-4">
+        {/* 1 ▸ Live Feed (col-span-2) */}
+        <Card className="lg:col-span-2" delay={0.05}>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-300">Live Feed</h2>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-0.5 text-xs font-semibold text-sky-400">
+                {totalCount} detected
+              </span>
+              <span className="rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-xs text-slate-400">
+                {personCount} bodies + {headCount} heads
+              </span>
+            </div>
+          </div>
+          <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-slate-800">
+            {frame ? (
+              <img
+                src={`data:image/jpeg;base64,${frame}`}
+                alt="Live camera feed with YOLOv8 person detection"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+                  <span className="text-sm font-medium text-slate-500">
+                    Connecting to backend…
+                  </span>
+>>>>>>> kartikey2
                 </div>
               )}
             </div>

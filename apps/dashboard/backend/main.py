@@ -172,6 +172,10 @@ async def ws_stream(websocket: WebSocket):
     use_synthetic = False
     use_image = False
     static_frame = None
+    _flow_frame_count = 0
+    _cached_flow = {"flow_vectors": [["·"] * 5 for _ in range(4)], "flow_magnitudes": [[0.0] * 5 for _ in range(4)]}
+    TARGET_FPS = 15
+    FRAME_INTERVAL = 1.0 / TARGET_FPS
 
     mode = app_state["mode"]
 
@@ -210,6 +214,7 @@ async def ws_stream(websocket: WebSocket):
 
     try:
         while True:
+            frame_start = time.time()
             # ── Image mode ──────────────────────────────────────────
             if use_image and static_frame is not None:
                 frame = static_frame.copy()
@@ -269,7 +274,12 @@ async def ws_stream(websocket: WebSocket):
                 person_count = result["person_count"]
                 head_count = result["head_count"]
                 annotated = draw_boxes(frame.copy(), detections)
-                flow = compute_optical_flow(frame)
+
+                # Only compute optical flow every 3 frames
+                _flow_frame_count += 1
+                if _flow_frame_count % 3 == 0:
+                    _cached_flow = compute_optical_flow(frame)
+                flow = _cached_flow
 
             # ── Mock fallback ───────────────────────────────────────
             else:
@@ -297,8 +307,10 @@ async def ws_stream(websocket: WebSocket):
             # ── History ─────────────────────────────────────────────
             _append_history(total_count)
 
-            # ── Encode frame as base64 JPEG ─────────────────────────
-            _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            # ── Encode frame as base64 JPEG ───────────────────────
+            # Resize annotated frame for faster encoding & transfer
+            send_frame = cv2.resize(annotated, (480, 360))
+            _, buf = cv2.imencode(".jpg", send_frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
             frame_b64 = base64.b64encode(buf.tobytes()).decode("utf-8")
 
             # ── Build payload ───────────────────────────────────────
@@ -318,7 +330,10 @@ async def ws_stream(websocket: WebSocket):
             }
 
             await websocket.send_text(json.dumps(payload))
-            await asyncio.sleep(0.1)  # ~10 FPS
+
+            # Proper frame-rate limiting
+            elapsed = time.time() - frame_start
+            await asyncio.sleep(max(0.01, FRAME_INTERVAL - elapsed))  # ~15 FPS target
 
     except WebSocketDisconnect:
         print("[ws] Client disconnected")

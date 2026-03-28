@@ -18,12 +18,12 @@ _model = None
 
 
 def _get_model():
-    """Load YOLOv8 medium model once, downloading automatically."""
+    """Load YOLOv8 nano model once for fast real-time inference."""
     global _model
     if _model is None:
         from ultralytics import YOLO
-        print("[detector] Loading YOLOv8m model (will download on first run)…")
-        _model = YOLO("yolov8m.pt")
+        print("[detector] Loading YOLOv8n model (fast mode)…")
+        _model = YOLO("yolov8n.pt")
         print("[detector] Model loaded ✓")
     return _model
 
@@ -39,19 +39,19 @@ profile_cascade = cv2.CascadeClassifier(
 
 # ── Person detection ────────────────────────────────────────────────
 
-def detect_persons(frame: np.ndarray, conf: float = 0.4, imgsz: int = 640) -> list:
+def detect_persons(frame: np.ndarray, conf: float = 0.35, imgsz: int = 320) -> list:
     """
-    Run YOLOv8m inference on *frame* and return only person detections.
+    Run YOLOv8n inference on *frame* and return only person detections.
     Returns a list of detection dicts.
     """
     model = _get_model()
     results = model(
         frame,
         conf=conf,
-        iou=0.35,
+        iou=0.45,
         classes=[0],
         verbose=False,
-        max_det=100,
+        max_det=50,
         imgsz=imgsz,
     )
 
@@ -199,21 +199,32 @@ def draw_boxes(frame: np.ndarray, detections: list) -> np.ndarray:
 
 # ── Main detect function ────────────────────────────────────────────
 
-def detect(frame: np.ndarray, conf: float = 0.4, imgsz: int = 640) -> dict:
+_detect_frame_count = 0
+_cached_heads: list = []
+_HEAD_DETECT_INTERVAL = 5  # Run head detection every N frames
+
+def detect(frame: np.ndarray, conf: float = 0.35, imgsz: int = 320) -> dict:
     """
     Main detection function.
     Returns merged detections: persons + uncounted heads.
-    This avoids double counting.
+    Head detection runs every N frames to save CPU.
     """
-    # Run both detectors
-    persons = detect_persons(frame, conf=conf, imgsz=imgsz)
-    heads = detect_heads(frame)
+    global _detect_frame_count, _cached_heads
+    _detect_frame_count += 1
 
-    # Only add heads that are NOT already inside a person box
-    extra_heads = [
-        head for head in heads
-        if not is_head_inside_person(head, persons)
-    ]
+    # Always run YOLO person detection (fast with nano model)
+    persons = detect_persons(frame, conf=conf, imgsz=imgsz)
+
+    # Run head detection only every N frames, reuse cached results otherwise
+    if _detect_frame_count % _HEAD_DETECT_INTERVAL == 0:
+        heads = detect_heads(frame)
+        extra_heads = [
+            head for head in heads
+            if not is_head_inside_person(head, persons)
+        ]
+        _cached_heads = extra_heads
+    else:
+        extra_heads = _cached_heads
 
     # Merge: all persons + only uncounted heads
     all_detections = persons + extra_heads
@@ -252,14 +263,18 @@ def compute_optical_flow(frame: np.ndarray) -> dict:
             "flow_magnitudes": [[0.0] * cols for _ in range(rows)],
         }
 
+    # Downsample for faster optical flow computation
+    small_gray = cv2.resize(gray, (160, 120))
+    small_prev = cv2.resize(_prev_gray, (160, 120))
+
     flow = cv2.calcOpticalFlowFarneback(
-        _prev_gray, gray, None,
-        pyr_scale=0.5, levels=3, winsize=15,
-        iterations=3, poly_n=5, poly_sigma=1.2, flags=0,
+        small_prev, small_gray, None,
+        pyr_scale=0.5, levels=2, winsize=11,
+        iterations=2, poly_n=5, poly_sigma=1.1, flags=0,
     )
     _prev_gray = gray
 
-    h, w = gray.shape
+    h, w = small_gray.shape
     step_y, step_x = h // rows, w // cols
 
     vectors: list[list[str]] = []

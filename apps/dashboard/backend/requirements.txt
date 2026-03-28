@@ -7,3 +7,8 @@ numpy
 python-multipart
 facenet-pytorch
 torchvision
+pyjwt
+bcrypt
+motor
+python-dotenv
+certifi

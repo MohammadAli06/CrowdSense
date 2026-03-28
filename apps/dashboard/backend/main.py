@@ -68,6 +68,44 @@ _crowd_history: list[int] = []
 _MAX_HISTORY = 60
 
 
+# ── Camera helper ────────────────────────────────────────────────────
+
+import os
+import platform
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env explicitly from the same directory as main.py
+env_path = Path(__file__).parent / ".env"
+load_dotenv(dotenv_path=env_path)
+
+# CAMERA_URL: set in .env to your CP Plus RTSP URL.
+# e.g.  rtsp://admin:admin12345@152.59.98.1:554/stream1
+# Leave unset to fall back to USB webcam (index 0).
+CAMERA_URL: str | None = os.getenv("CAMERA_URL", None)
+print(f"[camera] Loaded CAMERA_URL from .env: {CAMERA_URL}")
+
+
+def _open_camera() -> cv2.VideoCapture:
+    """Open the CP Plus RTSP stream ONLY — no USB webcam fallback."""
+    if CAMERA_URL:
+        print(f"[camera] Connecting to CP Plus RTSP stream: {CAMERA_URL}")
+        cap = cv2.VideoCapture(CAMERA_URL, cv2.CAP_FFMPEG)
+        if cap.isOpened():
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            print(f"[camera] ✓ CP Plus RTSP connected! {w}x{h} @ {fps:.1f} FPS")
+        else:
+            print("[camera] ✗ CP Plus RTSP connection FAILED. Check IP/credentials/network.")
+            print("[camera]   URL attempted: " + CAMERA_URL)
+    else:
+        print("[camera] ✗ No CAMERA_URL set in .env — cannot connect to CP Plus camera.")
+        cap = cv2.VideoCapture()  # empty, unopened capture
+
+    return cap
+
+
 def _append_history(count: int):
     _crowd_history.append(count)
     if len(_crowd_history) > _MAX_HISTORY:
@@ -86,7 +124,7 @@ async def health():
 @app.get("/snapshot")
 async def snapshot():
     """Return a single processed frame as JPEG image (or mock placeholder)."""
-    cap = cv2.VideoCapture(0)
+    cap = _open_camera()
     if cap.isOpened():
         ret, frame = cap.read()
         cap.release()
@@ -111,13 +149,18 @@ async def ws_stream(websocket: WebSocket):
     await websocket.accept()
 
     alert_mgr = AlertManager()
-    cap = cv2.VideoCapture(0)
+    
+    # Open camera asynchronously to avoid blocking the event loop
+    # on network lag or connection failures
+    cap = await asyncio.to_thread(_open_camera)
     use_webcam = cap.isOpened()
-
+    
     if use_webcam:
-        print("[ws] Webcam opened ✓")
+        print("[ws] CP Plus camera stream opened \u2713")
+        # Give the stream a moment to buffer
+        await asyncio.sleep(0.5)
     else:
-        print("[ws] No webcam detected — falling back to mock data")
+        print("[ws] CP Plus camera NOT available \u2014 using mock data")
         cap.release()
 
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) if use_webcam else 640
@@ -127,13 +170,13 @@ async def ws_stream(websocket: WebSocket):
         while True:
             # ── Read / generate frame ───────────────────────────────
             if use_webcam:
-                ret, frame = cap.read()
+                ret, frame = await asyncio.to_thread(cap.read)
                 if not ret:
                     await asyncio.sleep(0.1)
                     continue
 
                 # Real detection
-                result = detect_persons(frame)
+                result = await asyncio.to_thread(detect_persons, frame)
                 detections = result["detections"]
                 total_count = result["total_count"]
 
@@ -141,7 +184,7 @@ async def ws_stream(websocket: WebSocket):
                 annotated = draw_boxes(frame.copy(), detections)
 
                 # Optical flow
-                flow = compute_optical_flow(frame)
+                flow = await asyncio.to_thread(compute_optical_flow, frame)
             else:
                 # Mock mode
                 result = generate_mock_detections(frame_width, frame_height)
@@ -204,4 +247,4 @@ async def ws_stream(websocket: WebSocket):
     finally:
         if use_webcam:
             cap.release()
-            print("[ws] Webcam released")
+            print("[ws] CP Plus camera released")

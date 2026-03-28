@@ -96,7 +96,7 @@ async def ws_stream(websocket: WebSocket):
     use_webcam = cap.isOpened()
 
     if use_webcam:
-        print("[ws] Webcam opened ✓")
+        print("[ws] Webcam opened [OK]")
     else:
         print("[ws] No webcam detected — falling back to mock data")
         cap.release()

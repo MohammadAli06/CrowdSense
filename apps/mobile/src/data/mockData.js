@@ -1,0 +1,117 @@
+export const alerts = [
+  {
+    id: '1',
+    zone: 'SECTOR 7G',
+    severity: 'CRITICAL DENSITY',
+    severityLevel: 'high',
+    time: '2M AGO',
+    message: 'Crowd bottleneck detected at Main Entrance G. Expected dwell time exceeding 15 minutes.',
+    metric: '4.2 p/m²',
+    trend: '+12% vs avg',
+  },
+  {
+    id: '2',
+    zone: 'NORTH PLAZA',
+    severity: 'WARNING',
+    severityLevel: 'medium',
+    time: '14M AGO',
+    message: 'Sustained movement pattern deviation in Zone B-4. Possible obstruction near walkway.',
+    metric: '0.4 m/s avg flow',
+    trend: null,
+  },
+  {
+    id: '3',
+    zone: 'CONCOURSE',
+    severity: 'ADVISORY',
+    severityLevel: 'low',
+    time: '45M AGO',
+    message: 'Capacity threshold reached for Concourse Lounge. Rerouting digital signage recommended.',
+    metric: null,
+    trend: null,
+  },
+];
+
+export const zones = [
+  {
+    id: 'A',
+    name: 'Zone A',
+    fullName: 'Zone A — Main Gate',
+    status: 'STABLE',
+    people: 124,
+    x: 0.25,
+    y: 0.42,
+    color: '#34C759',
+  },
+  {
+    id: 'B',
+    name: 'Zone B',
+    fullName: 'Zone B — North Gate',
+    status: 'MODERATE',
+    people: 412,
+    x: 0.6,
+    y: 0.25,
+    color: '#FF9500',
+  },
+  {
+    id: 'C',
+    name: 'Zone C',
+    fullName: 'Zone C — South Entry',
+    status: 'DENSE',
+    people: 863,
+    x: 0.7,
+    y: 0.6,
+    color: '#FF6B35',
+  },
+  {
+    id: 'D',
+    name: 'Zone D',
+    fullName: 'Zone D — Stage Area',
+    status: 'CRITICAL',
+    people: 1284,
+    x: 0.65,
+    y: 0.1,
+    color: '#FF3B30',
+  },
+];
+
+export const zoneDetail = {
+  id: 'A',
+  name: 'Zone A — Main Gate',
+  status: 'HIGH DENSITY',
+  people: 1284,
+  refreshed: '2m ago',
+  peakTime: '16:45',
+  evacRoute: 'Gate 4B',
+  densityGrid: [
+    ['stable', 'stable', 'warning', 'critical'],
+    ['stable', 'warning', 'critical', 'critical'],
+    ['warning', 'stable', 'warning', 'warning'],
+    ['stable', 'stable', 'warning', 'warning'],
+  ],
+  chartData: [
+    { time: '14:00', value: 800 },
+    { time: '14:15', value: 900 },
+    { time: '14:30', value: 850 },
+    { time: '14:45', value: 1100 },
+    { time: '15:00', value: 1284 },
+  ],
+};
+
+export const trendsData = {
+  peak: '1.2k',
+  average: '842',
+  current: '915',
+  chartData: [
+    { time: '14:00', value: 400 },
+    { time: '14:15', value: 600 },
+    { time: '14:30', value: 900 },
+    { time: '14:45', value: 700 },
+    { time: '15:00', value: 1200 },
+  ],
+  zones: [
+    { name: 'Zone A', location: 'Main Plaza', capacity: 72, color: '#34C759' },
+    { name: 'Zone B', location: 'North Gate', capacity: 94, color: '#FF3B30' },
+    { name: 'Zone C', location: 'South Entry', capacity: 22, color: '#8A9BB0' },
+    { name: 'Zone D', location: 'Stage Area', capacity: 48, color: '#34C759' },
+  ],
+};

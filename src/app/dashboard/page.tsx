@@ -119,6 +119,9 @@ export default function DashboardPage() {
   const {
     frame,
     totalCount,
+    personCount,
+    headCount,
+    detectionMode,
     zones,
     heatmap,
     alerts,
@@ -287,9 +290,14 @@ export default function DashboardPage() {
         <Card className="lg:col-span-2" delay={0.05}>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-300">Live Feed</h2>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-0.5 text-xs font-semibold text-sky-400">
-              {totalCount} persons detected
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-0.5 text-xs font-semibold text-sky-400">
+                {totalCount} detected
+              </span>
+              <span className="rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-xs text-slate-400">
+                {personCount} bodies + {headCount} heads
+              </span>
+            </div>
           </div>
           <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-slate-800">
             {frame ? (

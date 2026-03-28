@@ -24,6 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
 from detector import (
+    detect,
     detect_persons,
     draw_boxes,
     compute_optical_flow,
@@ -195,12 +196,12 @@ async def ws_stream(websocket: WebSocket):
             if use_image and static_frame is not None:
                 frame = static_frame.copy()
                 
-                # Let YOLO internally run high-res inference on the 640x480 frame
-                # It automatically maps the boxes back down to 640x480 natively.
-                # Lowering conf threshold picks up tiny, distant faces in crowds.
-                result = detect_persons(frame, conf=0.10, imgsz=1280)
+                # Use unified detect() for person + head detection
+                result = detect(frame, conf=0.10, imgsz=1280)
                 detections = result["detections"]
                 total_count = result["total_count"]
+                person_count = result["person_count"]
+                head_count = result["head_count"]
                 
                 annotated = draw_boxes(frame, detections)
                 flow = generate_mock_flow()
@@ -221,8 +222,11 @@ async def ws_stream(websocket: WebSocket):
                         "x1": x1, "y1": y1,
                         "x2": min(x2, 639), "y2": min(y2, 479),
                         "confidence": round(_rand.uniform(0.6, 0.95), 2),
+                        "type": "person",
                     })
                 total_count = len(detections)
+                person_count = total_count
+                head_count = 0
                 annotated = draw_boxes(frame.copy(), detections)
                 cv2.putText(annotated, "SYNTHETIC DEMO", (220, 470),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 200, 255), 1)
@@ -241,9 +245,11 @@ async def ws_stream(websocket: WebSocket):
                         await asyncio.sleep(0.1)
                         continue
 
-                result = detect_persons(frame)
+                result = detect(frame)
                 detections = result["detections"]
                 total_count = result["total_count"]
+                person_count = result["person_count"]
+                head_count = result["head_count"]
                 annotated = draw_boxes(frame.copy(), detections)
                 flow = compute_optical_flow(frame)
 
@@ -252,6 +258,8 @@ async def ws_stream(websocket: WebSocket):
                 result = generate_mock_detections(frame_width, frame_height)
                 detections = result["detections"]
                 total_count = result["total_count"]
+                person_count = result["person_count"]
+                head_count = result["head_count"]
 
                 annotated = np.zeros((frame_height, frame_width, 3), dtype=np.uint8)
                 for y in range(0, frame_height, 4):
@@ -279,6 +287,9 @@ async def ws_stream(websocket: WebSocket):
             payload = {
                 "frame": frame_b64,
                 "total_count": total_count,
+                "person_count": person_count,
+                "head_count": head_count,
+                "detection_mode": f"{person_count} bodies + {head_count} heads",
                 "zones": zone_data["zones"],
                 "heatmap": zone_data["heatmap"],
                 "alerts": alerts,

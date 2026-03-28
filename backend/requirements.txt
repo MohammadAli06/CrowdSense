@@ -5,3 +5,5 @@ opencv-python
 websockets
 numpy
 python-multipart
+facenet-pytorch
+torchvision

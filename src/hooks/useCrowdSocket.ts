@@ -53,6 +53,9 @@ export interface AlertItem {
 export interface CrowdPayload {
   frame: string;
   total_count: number;
+  person_count: number;
+  head_count: number;
+  detection_mode: string;
   zones: Record<string, ZoneInfo>;
   heatmap: string[][];
   alerts: AlertItem[];
@@ -68,6 +71,9 @@ const RECONNECT_DELAY = 3000;
 export function useCrowdSocket() {
   const [frame, setFrame] = useState<string>("");
   const [totalCount, setTotalCount] = useState(0);
+  const [personCount, setPersonCount] = useState(0);
+  const [headCount, setHeadCount] = useState(0);
+  const [detectionMode, setDetectionMode] = useState("");
   const [zones, setZones] = useState<Record<string, ZoneInfo>>({});
   const [heatmap, setHeatmap] = useState<string[][]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
@@ -101,6 +107,9 @@ export function useCrowdSocket() {
           const data: CrowdPayload = JSON.parse(event.data);
           setFrame(data.frame);
           setTotalCount(data.total_count);
+          setPersonCount(data.person_count ?? 0);
+          setHeadCount(data.head_count ?? 0);
+          setDetectionMode(data.detection_mode ?? "");
           setZones(data.zones);
           setHeatmap(data.heatmap);
           setAlerts(data.alerts);
@@ -161,6 +170,9 @@ export function useCrowdSocket() {
   return {
     frame,
     totalCount,
+    personCount,
+    headCount,
+    detectionMode,
     zones,
     heatmap,
     alerts,

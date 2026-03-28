@@ -6,6 +6,7 @@ import {
 import { Colors } from '../theme/colors';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
+import ConnectionBanner from '../components/ConnectionBanner';
 
 const { width } = Dimensions.get('window');
 
@@ -29,6 +30,8 @@ export default function RouteScreen() {
           </View>
         </View>
       </View>
+
+      <ConnectionBanner />
 
       <ScrollView
         style={styles.scroll}

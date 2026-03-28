@@ -37,8 +37,8 @@ app = FastAPI(title="CrowdSense Backend")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
+    allow_origins=["*"],          # Allows Expo mobile app on any local IP
+    allow_credentials=False,      # Must be False when allow_origins=["*"]
     allow_methods=["*"],
     allow_headers=["*"],
 )

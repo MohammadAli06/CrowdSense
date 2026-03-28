@@ -29,7 +29,7 @@ def _get_model():
 
 # ── Person detection ────────────────────────────────────────────────
 
-def detect_persons(frame: np.ndarray) -> dict:
+def detect_persons(frame: np.ndarray, conf: float = 0.25, imgsz: int = 640) -> dict:
     """
     Run YOLOv8 inference on *frame* and return only person detections.
 
@@ -41,7 +41,7 @@ def detect_persons(frame: np.ndarray) -> dict:
     }
     """
     model = _get_model()
-    results = model(frame, verbose=False, classes=[0])  # class 0 = person
+    results = model(frame, verbose=False, classes=[0], conf=conf, imgsz=imgsz)  # class 0 = person
 
     detections = []
     for r in results:
@@ -59,17 +59,45 @@ def detect_persons(frame: np.ndarray) -> dict:
     return {"detections": detections, "total_count": len(detections)}
 
 
+def _zone_color(cx: int, cy: int, w: int, h: int) -> tuple:
+    """Return BGR color based on which zone the centre falls in."""
+    mid_x, mid_y = w // 2, h // 2
+    if cy < mid_y:
+        return (0, 255, 0) if cx < mid_x else (0, 255, 255)      # A=green, B=yellow
+    else:
+        return (0, 165, 255) if cx < mid_x else (0, 0, 255)       # C=orange, D=red
+
+
 def draw_boxes(frame: np.ndarray, detections: list) -> np.ndarray:
-    """Draw green bounding boxes + confidence labels on *frame* (in-place)."""
-    for d in detections:
-        color = (0, 255, 0)  # green in BGR
-        cv2.rectangle(frame, (d["x1"], d["y1"]), (d["x2"], d["y2"]), color, 2)
-        label = f'{d["confidence"]:.0%}'
-        cv2.putText(
-            frame, label,
-            (d["x1"], d["y1"] - 8),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA,
-        )
+    """Draw zone-colored bounding boxes + confidence labels on *frame* (in-place)."""
+    h, w = frame.shape[:2]
+
+    for det in detections:
+        x1, y1, x2, y2 = int(det["x1"]), int(det["y1"]), int(det["x2"]), int(det["y2"])
+        conf = det["confidence"]
+        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+        color = _zone_color(cx, cy, w, h)
+
+        # Draw rectangle
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+
+        # Draw confidence label with filled background
+        label = f"Person {conf:.2f}"
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+        cv2.rectangle(frame, (x1, y1 - th - 6), (x1 + tw + 4, y1), color, -1)
+        cv2.putText(frame, label, (x1 + 2, y1 - 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
+
+    # Draw zone divider lines
+    cv2.line(frame, (w // 2, 0), (w // 2, h), (100, 100, 100), 1)
+    cv2.line(frame, (0, h // 2), (w, h // 2), (100, 100, 100), 1)
+
+    # Label each zone
+    cv2.putText(frame, "Zone A", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 1)
+    cv2.putText(frame, "Zone B", (w // 2 + 10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 1)
+    cv2.putText(frame, "Zone C", (10, h // 2 + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 1)
+    cv2.putText(frame, "Zone D", (w // 2 + 10, h // 2 + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 1)
+
     return frame
 
 

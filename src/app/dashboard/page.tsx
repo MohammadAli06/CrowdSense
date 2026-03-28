@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import {
@@ -127,6 +127,7 @@ export default function DashboardPage() {
     flowMagnitudes,
     isConnected,
     mockMode,
+    reconnect,
   } = useCrowdSocket();
 
   // ── Clock ────────────────────────────────────────────────────────
@@ -145,6 +146,17 @@ export default function DashboardPage() {
     return () => clearInterval(id);
   }, []);
 
+  // ── Critical flash ───────────────────────────────────────────────
+  const [criticalFlash, setCriticalFlash] = useState(false);
+
+  useEffect(() => {
+    if (alerts.some((a) => a.severity === "High")) {
+      setCriticalFlash(true);
+      const t = setTimeout(() => setCriticalFlash(false), 1000);
+      return () => clearTimeout(t);
+    }
+  }, [alerts]);
+
   // ── Chart data from live history ─────────────────────────────────
   const chartData = useMemo(
     () => crowdHistory.map((count, i) => ({ time: `${i}s`, count })),
@@ -157,8 +169,32 @@ export default function DashboardPage() {
     return { name: `Zone ${z}`, ...info };
   });
 
+  // ── Mode switch helpers ──────────────────────────────────────────
+  const switchMode = useCallback(async (url: string, method = "POST") => {
+    try { await fetch(url, { method }); } catch { /* ignore */ }
+    reconnect();
+  }, [reconnect]);
+
+  const uploadVideo = useCallback(async (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      await fetch("http://localhost:8000/upload-video", {
+        method: "POST",
+        body: form,
+      });
+    } catch { /* ignore */ }
+    reconnect();
+  }, [reconnect]);
+
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div
+      className={`min-h-screen transition-all duration-300 ${
+        criticalFlash
+          ? "ring-2 ring-red-500 ring-inset bg-red-950/10"
+          : "bg-slate-950"
+      }`}
+    >
       {/* ------- NAVBAR ------- */}
       <nav className="sticky top-0 z-50 flex items-center justify-between border-b border-slate-800 bg-slate-950/80 px-6 py-3 backdrop-blur-md">
         {/* Left — logo */}
@@ -199,8 +235,54 @@ export default function DashboardPage() {
         </div>
       </nav>
 
+      {/* ------- INPUT SOURCE SWITCHER ------- */}
+      <main className="mx-auto max-w-[1440px] px-5 pt-5">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <span className="text-sm text-slate-400">Input Source:</span>
+
+          <button
+            onClick={() => switchMode("http://localhost:8000/set-mode?mode=webcam")}
+            className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700"
+          >
+            📷 Webcam
+          </button>
+
+          <button
+            onClick={() => switchMode("http://localhost:8000/bundled-demo", "GET")}
+            className="rounded-lg border border-sky-700 bg-sky-900/40 px-3 py-1.5 text-xs font-medium text-sky-400 transition-colors hover:bg-sky-900/70"
+          >
+            🎬 Crowd Demo
+          </button>
+
+          <label className="cursor-pointer rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700">
+            📁 Upload File
+            <input
+              type="file"
+              accept="video/*,image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) uploadVideo(file);
+                e.target.value = "";
+              }}
+            />
+          </label>
+
+          <div className="ml-auto flex items-center gap-2">
+            <div
+              className={`h-2 w-2 rounded-full ${
+                isConnected ? "animate-pulse bg-green-500" : "bg-red-500"
+              }`}
+            />
+            <span className="text-xs text-slate-400">
+              {isConnected ? "Backend connected" : "Reconnecting..."}
+            </span>
+          </div>
+        </div>
+      </main>
+
       {/* ------- GRID ------- */}
-      <main className="mx-auto grid max-w-[1440px] gap-5 p-5 lg:grid-cols-3 xl:grid-cols-4">
+      <main className="mx-auto grid max-w-[1440px] gap-5 px-5 pb-5 lg:grid-cols-3 xl:grid-cols-4">
         {/* 1 ▸ Live Feed (col-span-2) */}
         <Card className="lg:col-span-2" delay={0.05}>
           <div className="mb-3 flex items-center justify-between">

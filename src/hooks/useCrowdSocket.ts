@@ -2,6 +2,37 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 
+/* ── Alert sound via Web Audio API ────────────────────────────────── */
+function playAlertSound(severity: string) {
+  const AudioCtx = window.AudioContext ?? (window as any).webkitAudioContext;
+  if (!AudioCtx) return;
+  const ctx = new AudioCtx();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  if (severity === "High") {
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(660, ctx.currentTime + 0.15);
+    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.3);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.5);
+  } else if (severity === "Med") {
+    osc.frequency.setValueAtTime(440, ctx.currentTime);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+  } else {
+    ctx.close();
+    return;
+  }
+  osc.onended = () => ctx.close();
+}
+
 /** Shape of each zone coming from the backend. */
 export interface ZoneInfo {
   count: number;
@@ -49,6 +80,7 @@ export function useCrowdSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  const prevAlertIds = useRef<Set<number>>(new Set());
 
   const connect = useCallback(() => {
     if (!mountedRef.current) return;
@@ -76,6 +108,15 @@ export function useCrowdSocket() {
           setFlowVectors(data.flow_vectors ?? []);
           setFlowMagnitudes(data.flow_magnitudes ?? []);
           setMockMode(data.mock_mode ?? false);
+
+          // Play sound for NEW alerts only
+          const newAlerts = (data.alerts ?? []).filter(
+            (a: AlertItem) => !prevAlertIds.current.has(a.id)
+          );
+          newAlerts.forEach((a: AlertItem) => {
+            playAlertSound(a.severity);
+            prevAlertIds.current.add(a.id);
+          });
         } catch {
           // ignore malformed frames
         }
@@ -109,6 +150,14 @@ export function useCrowdSocket() {
     };
   }, [connect]);
 
+  // Force-reconnect: close current WS so a fresh connection picks up the new mode
+  const reconnect = useCallback(() => {
+    if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+    wsRef.current?.close();
+    // small delay to let the backend process the mode change
+    reconnectTimer.current = setTimeout(connect, 500);
+  }, [connect]);
+
   return {
     frame,
     totalCount,
@@ -120,5 +169,6 @@ export function useCrowdSocket() {
     flowMagnitudes,
     isConnected,
     mockMode,
+    reconnect,
   };
 }

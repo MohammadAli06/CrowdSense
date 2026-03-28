@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import datetime
-import os
 
 import bcrypt
 from dotenv import load_dotenv
@@ -22,24 +21,23 @@ load_dotenv()
 
 
 async def seed() -> None:
-    # Import here so database module reads env
     import database
 
     await database.connect()
 
-    existing = await database.db.admins.find_one({"email": "admin@crowdsense.com"})
+    existing = await database.db.users.find_one({"email": "admin@crowdsense.com"})
     if existing:
         print("[seed] Admin already exists — skipping.")
         return
 
     hashed = bcrypt.hashpw(b"admin123", bcrypt.gensalt()).decode()
-    await database.db.admins.insert_one(
+    await database.db.users.insert_one(
         {
-            "name":          "Admin User",
-            "email":         "admin@crowdsense.com",
+            "name": "Admin User",
+            "email": "admin@crowdsense.com",
             "password_hash": hashed,
-            "role":          "superadmin",
-            "created_at":    datetime.datetime.utcnow(),
+            "role": "superadmin",
+            "created_at": datetime.datetime.utcnow(),
         }
     )
     print("[seed] ✓ Default admin created:")

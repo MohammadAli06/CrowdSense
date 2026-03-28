@@ -3,7 +3,6 @@ database.py — MongoDB connection for CrowdSense.
 
 Uses motor (async MongoDB driver).
 Set MONGO_URI in your environment or .env file.
-Defaults to a local MongoDB instance.
 """
 from __future__ import annotations
 
@@ -26,7 +25,7 @@ async def connect() -> None:
     db = _client[os.getenv("MONGO_DB", "crowdsense")]
     # Ping to confirm connection
     await _client.admin.command("ping")
-    print(f"[DB] Connected to MongoDB → {uri}")
+    print(f"[DB] Connected to MongoDB ✓")
 
 
 async def disconnect() -> None:

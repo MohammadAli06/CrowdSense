@@ -32,7 +32,52 @@ function heatColor(v: string) {
 
 export default function DashboardPage() {
   const [time, setTime] = useState("");
+  const [uploading, setUploading] = useState(false)
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const { frame, totalCount, zones, heatmap, alerts, crowdHistory, flowVectors, flowMagnitudes, isConnected, mockMode } = useCrowdSocket();
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg',
+                        'video/mp4', 'video/avi', 'video/quicktime',
+                        'video/x-msvideo', 'video/webm']
+    if (!validTypes.includes(file.type)) {
+        setUploadError('Please upload JPG, PNG, MP4, AVI or MOV file')
+        return
+    }
+
+    setUploading(true)
+    setUploadError(null)
+    setUploadedFileName(null)
+
+    try {
+        const form = new FormData()
+        form.append('file', file)
+
+        const res = await fetch('http://localhost:8000/upload-video', {
+            method: 'POST',
+            body: form,
+        })
+
+        const data = await res.json()
+
+        if (data.status === 'ok') {
+            setUploadedFileName(file.name)
+            setUploadError(null)
+        } else {
+            setUploadError(data.message || 'Upload failed')
+        }
+    } catch (err) {
+        setUploadError('Could not connect to backend')
+    } finally {
+        setUploading(false)
+        e.target.value = ''
+    }
+  }
 
   useEffect(() => {
     const tick = () => setTime(new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }));
@@ -54,9 +99,40 @@ export default function DashboardPage() {
       title="Dashboard"
       searchPlaceholder="Global system search..."
       topRight={
-        <div className="flex items-center gap-2 text-[11px] font-mono" style={{ color: isConnected ? "#10b981" : "#ff4d6d" }}>
-          <span className="w-2 h-2 rounded-full animate-pulse-dot" style={{ background: isConnected ? "#10b981" : "#ff4d6d" }} />
-          {isConnected ? (mockMode ? "Mock Mode" : "Camera Feed Active") : "Reconnecting…"}
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-1">
+            <label className={`px-3 py-1.5 rounded-lg text-xs font-medium border cursor-pointer transition-all
+              ${uploading
+                  ? 'border-slate-600 bg-slate-800 text-slate-500 cursor-not-allowed'
+                  : 'border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}>
+              {uploading ? '⏳ Uploading...' : '📁 Upload File'}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/jpg,video/mp4,video/avi,video/quicktime,video/webm"
+                className="hidden"
+                disabled={uploading}
+                onChange={handleFileUpload}
+              />
+            </label>
+
+            {uploadedFileName && (
+              <span className="text-xs text-green-400 max-w-[120px] truncate">
+                ✓ {uploadedFileName}
+              </span>
+            )}
+
+            {uploadError && (
+              <span className="text-xs text-red-400">
+                ✗ {uploadError}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 text-[11px] font-mono" style={{ color: isConnected ? "#10b981" : "#ff4d6d" }}>
+            <span className="w-2 h-2 rounded-full animate-pulse-dot" style={{ background: isConnected ? "#10b981" : "#ff4d6d" }} />
+            {isConnected ? (mockMode ? "Mock Mode" : "Camera Feed Active") : "Reconnecting…"}
+          </div>
         </div>
       }
       statusItems={[
@@ -99,6 +175,27 @@ export default function DashboardPage() {
                 {totalCount} detected
               </span>
             </div>
+            {uploadedFileName && (
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse"/>
+                <span className="text-xs text-slate-400">
+                  Processing: {uploadedFileName}
+                </span>
+                <button
+                  onClick={async () => {
+                    try {
+                      await fetch('http://localhost:8000/set-mode?mode=webcam', {method:'POST'})
+                      setUploadedFileName(null)
+                    } catch (e) {
+                      console.error('Failed to switch mode:', e)
+                    }
+                  }}
+                  className="text-xs text-red-400 hover:text-red-300 ml-auto"
+                >
+                  ✕ Back to webcam
+                </button>
+              </div>
+            )}
             <div style={{ position: "relative", aspectRatio: "16/9", background: "#08111d", borderRadius: 8, overflow: "hidden" }}>
               {frame ? (
                 <img src={`data:image/jpeg;base64,${frame}`} alt="Live camera" style={{ width: "100%", height: "100%", objectFit: "cover" }} />

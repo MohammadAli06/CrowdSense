@@ -104,27 +104,44 @@ async def set_mode(mode: str, video_path: str = None):
 
 @app.post("/upload-video")
 async def upload_video(file: UploadFile = File(...)):
-    """Upload a video or image file and switch to the appropriate mode."""
-    os.makedirs("uploads", exist_ok=True)
-    path = f"uploads/{file.filename}"
-    with open(path, "wb") as f:
-        f.write(await file.read())
+    try:
+        os.makedirs("uploads", exist_ok=True)
+        path = f"uploads/{file.filename}"
 
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext in _IMAGE_EXTS:
-        # Read it directly with OpenCV as a static frame
-        img = cv2.imread(path)
-        if img is None:
-            return {"status": "error", "message": "Could not read image"}
-        # Resize to standard feed size
-        img = cv2.resize(img, (640, 480))
-        app_state["mode"] = "image"
-        app_state["image_frame"] = img
-        return {"status": "ok", "mode": "image", "path": path}
-    else:
-        app_state["mode"] = "demo"
-        app_state["demo_video_path"] = path
-        return {"status": "ok", "mode": "demo", "path": path}
+        # Save file to disk
+        contents = await file.read()
+        with open(path, "wb") as f:
+            f.write(contents)
+
+        # Detect if image or video by extension
+        image_exts = {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}
+        video_exts = {'.mp4', '.avi', '.mov', '.mkv', '.webm'}
+        ext = os.path.splitext(file.filename)[1].lower()
+
+        if ext in image_exts:
+            # Read image with OpenCV
+            img_array = np.frombuffer(contents, np.uint8)
+            img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+            if img is None:
+                return {"status": "error", "message": "Could not read image"}
+            # Resize to standard size
+            img = cv2.resize(img, (640, 480))
+            app_state["mode"] = "image"
+            app_state["image_frame"] = img
+            app_state["demo_video_path"] = None
+            return {"status": "ok", "mode": "image", "filename": file.filename}
+
+        elif ext in video_exts:
+            app_state["mode"] = "demo"
+            app_state["demo_video_path"] = path
+            app_state["image_frame"] = None
+            return {"status": "ok", "mode": "video", "filename": file.filename}
+
+        else:
+            return {"status": "error", "message": f"Unsupported file type: {ext}"}
+
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 @app.get("/bundled-demo")
@@ -167,68 +184,51 @@ async def ws_stream(websocket: WebSocket):
 
     alert_mgr = AlertManager()
     cap = None
-    use_webcam = False
-    use_demo = False
-    use_synthetic = False
-    use_image = False
-    static_frame = None
-
-    mode = app_state["mode"]
-
-    if mode == "image" and app_state.get("image_frame") is not None:
-        static_frame = app_state["image_frame"]
-        use_image = True
-        print("[ws] Image loaded from app_state ✓")
-    elif mode == "demo" and app_state["demo_video_path"]:
-        cap = cv2.VideoCapture(app_state["demo_video_path"])
-        if cap.isOpened():
-            use_demo = True
-            print(f"[ws] Demo video opened: {app_state['demo_video_path']} ✓")
-        else:
-            cap.release()
-            cap = None
-    elif mode == "synthetic":
-        use_synthetic = True
-        print("[ws] Synthetic crowd demo mode ✓")
-    else:
-        cap = cv2.VideoCapture(0)
-        if cap.isOpened():
-            use_webcam = True
-            print("[ws] Webcam opened ✓")
-        else:
-            print("[ws] No webcam detected — falling back to mock data")
-            cap.release()
-            cap = None
-
-    if use_image and static_frame is not None:
-        frame_height, frame_width = static_frame.shape[:2]
-    elif cap and cap.isOpened():
-        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    else:
-        frame_width, frame_height = 640, 480
 
     try:
         while True:
-            # ── Image mode ──────────────────────────────────────────
-            if use_image and static_frame is not None:
-                frame = static_frame.copy()
-                
-                # Use unified detect() for person + head detection
-                result = detect(frame, conf=0.10, imgsz=1280)
-                detections = result["detections"]
-                total_count = result["total_count"]
-                person_count = result["person_count"]
-                head_count = result["head_count"]
-                
-                annotated = draw_boxes(frame, detections)
-                flow = generate_mock_flow()
+            frame = None
 
-            # ── Synthetic mode ──────────────────────────────────────
-            elif use_synthetic:
+            if app_state["mode"] == "image" and app_state["image_frame"] is not None:
+                # Static image — copy it fresh every iteration
+                frame = app_state["image_frame"].copy()
+                ret = True
+
+            elif app_state["mode"] == "demo" and app_state["demo_video_path"]:
+                # Video file — open if not already open or path changed
+                if cap is None or not cap.isOpened():
+                    cap = cv2.VideoCapture(app_state["demo_video_path"])
+                ret, frame = cap.read()
+                if not ret:
+                    # Loop video back to start
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    ret, frame = cap.read()
+                if frame is not None:
+                    frame = cv2.resize(frame, (640, 480))
+
+            elif app_state["mode"] == "synthetic":
+                # Generate synthetic crowd frame
                 frame = np.zeros((480, 640, 3), dtype=np.uint8)
-                frame[:] = (30, 30, 40)
+                frame[:] = (25, 28, 36)
+                ret = True
 
+            else:
+                # Webcam mode
+                if cap is None or not cap.isOpened():
+                    cap = cv2.VideoCapture(0)
+                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                    cap.set(cv2.CAP_PROP_FPS, 15)
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                ret, frame = cap.read()
+
+            if frame is None:
+                await asyncio.sleep(0.1)
+                continue
+
+            # ── Run detection on frame ──────────────────────────────
+            if app_state["mode"] == "synthetic":
+                # Synthetic mode — generate mock detections
                 n_persons = _rand.randint(15, 30)
                 detections = []
                 for _ in range(n_persons):
@@ -245,51 +245,37 @@ async def ws_stream(websocket: WebSocket):
                 total_count = len(detections)
                 person_count = total_count
                 head_count = 0
-                annotated = draw_boxes(frame.copy(), detections)
-                cv2.putText(annotated, "SYNTHETIC DEMO", (220, 470),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 200, 255), 1)
                 flow = generate_mock_flow()
-                frame_width, frame_height = 640, 480
-
-            # ── Demo video / Webcam mode ────────────────────────────
-            elif cap and cap.isOpened():
-                ret, frame = cap.read()
-                if not ret:
-                    if use_demo:
-                        # Loop the demo video
-                        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                        continue
-                    else:
-                        await asyncio.sleep(0.1)
-                        continue
-
+            elif cap is None or not cap.isOpened():
+                # Mock fallback
+                result = generate_mock_detections(640, 480)
+                detections = result["detections"]
+                total_count = result["total_count"]
+                person_count = result["person_count"]
+                head_count = result["head_count"]
+                flow = generate_mock_flow()
+            else:
+                # Real detection
                 result = detect(frame)
                 detections = result["detections"]
                 total_count = result["total_count"]
                 person_count = result["person_count"]
                 head_count = result["head_count"]
-                annotated = draw_boxes(frame.copy(), detections)
                 flow = compute_optical_flow(frame)
 
-            # ── Mock fallback ───────────────────────────────────────
-            else:
-                result = generate_mock_detections(frame_width, frame_height)
-                detections = result["detections"]
-                total_count = result["total_count"]
-                person_count = result["person_count"]
-                head_count = result["head_count"]
+            # ── Draw boxes ──────────────────────────────────────────
+            annotated = draw_boxes(frame.copy(), detections)
 
-                annotated = np.zeros((frame_height, frame_width, 3), dtype=np.uint8)
-                for y in range(0, frame_height, 4):
-                    annotated[y, :] = [10, 10, 10]
-
-                annotated = draw_boxes(annotated, detections)
-                cv2.putText(annotated, "MOCK MODE — No Camera", (140, 470),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (100, 200, 255), 1)
-                flow = generate_mock_flow()
+            # Add mode indicator if needed
+            if app_state["mode"] == "synthetic":
+                cv2.putText(annotated, "SYNTHETIC DEMO", (220, 470),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 200, 255), 1)
+            elif app_state["mode"] == "image":
+                cv2.putText(annotated, "IMAGE MODE", (220, 470),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 200, 255), 1)
 
             # ── Zone calculation ────────────────────────────────────
-            zone_data = calculate_zones(detections, frame_width, frame_height)
+            zone_data = calculate_zones(detections, 640, 480)
 
             # ── Alerts ──────────────────────────────────────────────
             alerts = alert_mgr.update(zone_data["zones"], total_count)
@@ -314,7 +300,7 @@ async def ws_stream(websocket: WebSocket):
                 "crowd_history": list(_crowd_history),
                 "flow_vectors": flow["flow_vectors"],
                 "flow_magnitudes": flow["flow_magnitudes"],
-                "mock_mode": not use_webcam,
+                "mock_mode": app_state["mode"] != "webcam",
             }
 
             await websocket.send_text(json.dumps(payload))
@@ -326,6 +312,6 @@ async def ws_stream(websocket: WebSocket):
         print(f"[ws] Error: {e}")
         traceback.print_exc()
     finally:
-        if cap and cap.isOpened():
+        if cap is not None and cap.isOpened():
             cap.release()
             print("[ws] Video source released")

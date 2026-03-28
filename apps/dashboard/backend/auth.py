@@ -31,6 +31,10 @@ class LoginBody(BaseModel):
 async def login(body: LoginBody):
     """Validate credentials against the admins collection and return a JWT."""
 
+    # 0. Ensure DB is connected
+    if database.db is None:
+        raise HTTPException(status_code=503, detail="Database not connected. Restart the server.")
+
     # 1. Look up admin
     admin = await database.db.admins.find_one({"email": body.email})
     if not admin:

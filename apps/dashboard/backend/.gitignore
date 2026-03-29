@@ -1,0 +1,63 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Deep Learning weights/models
+*.pt
+*.pth
+*.weights
+yolov8n.pt
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Data
+.DS_Store
+Thumbs.db
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment and local config
+.env
+.env.*
+*.local
+
+# Test/typing/lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Logs and OS files
+*.log
+.DS_Store
+
+# Local databases
+*.sqlite3

@@ -1,0 +1,9 @@
+apps/dashboard/backend/__pycache__/alert_manager.cpython-313.pyc
+apps/dashboard/backend/__pycache__/detector.cpython-313.pyc
+apps/dashboard/backend/__pycache__/main.cpython-313.pyc
+apps/dashboard/backend/__pycache__/zone_manager.cpython-313.pyc
+apps/dashboard/backend/auth.py
+apps/dashboard/backend/database.py
+apps/dashboard/backend/main.py
+apps/dashboard/backend/requirements.txt
+apps/dashboard/backend/seed_admin.py
